@@ -7,8 +7,8 @@
  */
 
 @Library([
-    'forgerock-pipeline-libs@eab0ba2feead2896cdd0b6ecc979a4cc4ba6ea34',
-    'java-pipeline-libs@eab0ba2feead2896cdd0b6ecc979a4cc4ba6ea34'
+    'forgerock-pipeline-libs@e6ee1ee4b9d0a129bbcf07804afbda4d50c4d682',
+    'java-pipeline-libs@e6ee1ee4b9d0a129bbcf07804afbda4d50c4d682'
 ]) _
 
 import com.forgerock.pipeline.reporting.PipelineRun
