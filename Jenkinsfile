@@ -1,0 +1,102 @@
+/*
+ * Copyright 2019-2022 ForgeRock AS. All Rights Reserved
+ *
+ * Use of this code requires a commercial software license with ForgeRock AS.
+ * or with one of its affiliates. All use shall be exclusively subject
+ * to such license between the licensee and ForgeRock AS.
+ */
+
+@Library([
+    'forgerock-pipeline-libs@a4f6060382c4edd70bedfd33adfa87120772fb53',
+    'java-pipeline-libs@7d909d2ffb9ab751dc96e9c7bc9d253d3d993dbb'
+]) _
+
+import com.forgerock.pipeline.reporting.PipelineRun
+import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
+
+BASE_VERSION = '7.0.0'
+
+// Temporarily comment out directories to prevent that image being built
+buildDirectories = [
+    //[ name: 'git',              forceBuild: false ],
+    [ name: 'java-11',          forceBuild: true ],
+    // [ name: 'util',             forceBuild: false ],
+]
+
+def pipeline
+def pipelineRun
+
+timestamps {
+    node ('build&&linux') {
+
+        stage ('Clone repo') {
+            checkout scm
+
+            def jobLocation = "${env.WORKSPACE}/jenkins-scripts/pipelines/build"
+            def libsLocation = "${env.WORKSPACE}/jenkins-scripts/libs"
+            def stagesLocation = "${env.WORKSPACE}/jenkins-scripts/stages"
+
+            localGitUtils = load("${libsLocation}/git-utils.groovy")
+            commonModule = load("${libsLocation}/common.groovy")
+
+            currentBuild.displayName = "#${BUILD_NUMBER} - ${commonModule.FORGEOPS_SHORT_GIT_COMMIT}"
+            currentBuild.description = 'built:'
+
+            // Load the QaCloudUtils dynamically based on Lodestar commit promoted to Forgeops
+            library "QaCloudUtils@${commonModule.LODESTAR_GIT_COMMIT}"
+
+            if (env.TAG_NAME) {
+                currentBuild.result = 'ABORTED'
+                error 'This pipeline does not currently support building from a tag'
+            } else {
+                if (isPR()) {
+                    pipeline = load("${jobLocation}/pr.groovy")
+                    prAutomation = load("${libsLocation}/pr-automation.groovy")
+                } else {
+                    pipeline = load("${jobLocation}/postcommit.groovy")
+                    tagReadyForDevPipelines = load("${stagesLocation}/tag-ready-for-dev-pipelines.groovy")
+                    createPlatformImagesPR = load("${stagesLocation}/create-platform-images-pr.groovy")
+                }
+                pit1TestStage = load("${stagesLocation}/pr-postcommit-pit1-tests.groovy")
+                perfTestStage = load("${stagesLocation}/pr-postcommit-perf-tests.groovy")
+            }
+
+            pipelineName = 'forgeops'
+            if (isPR() && prAutomation.isAutomatedPullRequest()) {
+                pipelineName = 'forgeops-automated-pr'
+            }
+
+            builder = PipelineRun.builder(env, steps)
+                    .pipelineName(pipelineName)
+                    .branch(commonModule.FORGEOPS_GIT_BRANCH)
+                    .commit(commonModule.FORGEOPS_GIT_COMMIT)
+                    .committer(commonModule.FORGEOPS_GIT_COMMITTER)
+                    .commitMessage(commonModule.FORGEOPS_GIT_MESSAGE)
+                    .committerDate(dateTimeUtils.convertIso8601DateToInstant(commonModule.FORGEOPS_GIT_COMMITTER_DATE))
+                    .repo('forgeops')
+
+
+            if (isPR() && prAutomation.isAutomatedPullRequest()) {
+                builder.commits(prAutomation.getPrProductCommitHashes())
+            } else {
+                builder.commits(["forgeops": commonModule.FORGEOPS_GIT_COMMIT])
+            }
+            pipelineRun  = new PipelineRunLegacyAdapter(builder.build())
+        }
+
+        pipeline.build()
+    }
+
+    if (commonModule.branchSupportsPitTests()) {
+        pipeline.postBuildTests(pipelineRun)
+    }
+
+    if (commonModule.branchSupportsIDCloudReleases()) {
+        if (isPR()) {
+            prAutomation.mergeIfAutomatedProductVersionUpdate(pipelineRun, commonModule.FORGEOPS_GIT_COMMIT)
+        } else {
+            tagReadyForDevPipelines.runStage(pipelineRun)
+            pipeline.createPlatformImagesPR(pipelineRun)
+        }
+    }
+}
