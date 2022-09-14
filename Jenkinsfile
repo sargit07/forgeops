@@ -7,96 +7,92 @@
  */
 
 @Library([
-    'forgerock-pipeline-libs@a4f6060382c4edd70bedfd33adfa87120772fb53',
+    'forgerock-pipeline-libs@3475f82df20563edc6a67a90021bbb5f24d0f494',
     'java-pipeline-libs@7d909d2ffb9ab751dc96e9c7bc9d253d3d993dbb'
 ]) _
 
 import com.forgerock.pipeline.reporting.PipelineRun
 import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
 
-BASE_VERSION = '7.0.0'
+BASE_VERSION = '7.2.0'
 
-// Temporarily comment out directories to prevent that image being built
 buildDirectories = [
-    //[ name: 'git',              forceBuild: false ],
-    [ name: 'java-11',          forceBuild: true ],
-    // [ name: 'util',             forceBuild: false ],
+    [ name: 'ds-new', folder: 'ds', arguments: 'ds-new', forceBuild: false ],
+    [ name: 'proxy', folder: 'ds', arguments: '-f proxy/Dockerfile .', forceBuild: false ],
 ]
 
 def pipeline
 def pipelineRun
 
-timestamps {
-    node ('build&&linux') {
+node('gce-vm-forgeops-n1-standard-4') {
+    stage('Clone repo') {
+        checkout scm
 
-        stage ('Clone repo') {
-            checkout scm
+        def jobLocation = "${env.WORKSPACE}/jenkins-scripts/pipelines/build"
+        def libsLocation = "${env.WORKSPACE}/jenkins-scripts/libs"
+        def stagesLocation = "${env.WORKSPACE}/jenkins-scripts/stages"
 
-            def jobLocation = "${env.WORKSPACE}/jenkins-scripts/pipelines/build"
-            def libsLocation = "${env.WORKSPACE}/jenkins-scripts/libs"
-            def stagesLocation = "${env.WORKSPACE}/jenkins-scripts/stages"
+        localGitUtils = load("${libsLocation}/git-utils.groovy")
+        commonModule = load("${libsLocation}/common.groovy")
+        commonLodestarModule = load("${libsLocation}/lodestar-common.groovy")
 
-            localGitUtils = load("${libsLocation}/git-utils.groovy")
-            commonModule = load("${libsLocation}/common.groovy")
+        currentBuild.displayName = "#${BUILD_NUMBER} - ${commonModule.SHORT_GIT_COMMIT}"
+        currentBuild.description = 'built:'
 
-            currentBuild.displayName = "#${BUILD_NUMBER} - ${commonModule.FORGEOPS_SHORT_GIT_COMMIT}"
-            currentBuild.description = 'built:'
+        // Load the QaCloudUtils dynamically based on Lodestar commit promoted to Forgeops
+        library "QaCloudUtils@${commonModule.lodestarRevision}"
 
-            // Load the QaCloudUtils dynamically based on Lodestar commit promoted to Forgeops
-            library "QaCloudUtils@${commonModule.LODESTAR_GIT_COMMIT}"
-
-            if (env.TAG_NAME) {
-                currentBuild.result = 'ABORTED'
-                error 'This pipeline does not currently support building from a tag'
+        if (env.TAG_NAME) {
+            currentBuild.result = 'ABORTED'
+            error 'This pipeline does not currently support building from a tag'
+        } else {
+            if (isPR()) {
+                pipeline = load("${jobLocation}/pr.groovy")
+                prTestsStage = load("${stagesLocation}/pr-tests.groovy")
             } else {
-                if (isPR()) {
-                    pipeline = load("${jobLocation}/pr.groovy")
-                    prAutomation = load("${libsLocation}/pr-automation.groovy")
-                } else {
-                    pipeline = load("${jobLocation}/postcommit.groovy")
-                    tagReadyForDevPipelines = load("${stagesLocation}/tag-ready-for-dev-pipelines.groovy")
-                    createPlatformImagesPR = load("${stagesLocation}/create-platform-images-pr.groovy")
-                }
-                pit1TestStage = load("${stagesLocation}/pr-postcommit-pit1-tests.groovy")
-                perfTestStage = load("${stagesLocation}/pr-postcommit-perf-tests.groovy")
+                pipeline = load("${jobLocation}/postcommit.groovy")
+                createPlatformImagesPR = load("${stagesLocation}/create-platform-images-pr.groovy")
             }
-
-            pipelineName = 'forgeops'
-            if (isPR() && prAutomation.isAutomatedPullRequest()) {
-                pipelineName = 'forgeops-automated-pr'
-            }
-
-            builder = PipelineRun.builder(env, steps)
-                    .pipelineName(pipelineName)
-                    .branch(commonModule.FORGEOPS_GIT_BRANCH)
-                    .commit(commonModule.FORGEOPS_GIT_COMMIT)
-                    .committer(commonModule.FORGEOPS_GIT_COMMITTER)
-                    .commitMessage(commonModule.FORGEOPS_GIT_MESSAGE)
-                    .committerDate(dateTimeUtils.convertIso8601DateToInstant(commonModule.FORGEOPS_GIT_COMMITTER_DATE))
-                    .repo('forgeops')
-
-
-            if (isPR() && prAutomation.isAutomatedPullRequest()) {
-                builder.commits(prAutomation.getPrProductCommitHashes())
-            } else {
-                builder.commits(["forgeops": commonModule.FORGEOPS_GIT_COMMIT])
-            }
-            pipelineRun  = new PipelineRunLegacyAdapter(builder.build())
+            // Needed both for PR and postcommit
+            postcommitTestsStage = load("${stagesLocation}/postcommit-tests.groovy")
         }
 
-        pipeline.build()
+        builder = PipelineRun.builder(env, steps)
+                .pipelineName('forgeops')
+                .branch(commonModule.GIT_BRANCH)
+                .commit(commonModule.GIT_COMMIT)
+                .commits(["forgeops": commonModule.GIT_COMMIT])
+                .committer(commonModule.GIT_COMMITTER)
+                .commitMessage(commonModule.GIT_MESSAGE)
+                .committerDate(dateTimeUtils.convertIso8601DateToInstant(commonModule.GIT_COMMITTER_DATE))
+                .repo('forgeops')
+
+        pipelineRun = new PipelineRunLegacyAdapter(builder.build())
     }
+
+    pipeline.initialSteps()
+    pipeline.buildDockerImages(pipelineRun)
 
     if (commonModule.branchSupportsPitTests()) {
-        pipeline.postBuildTests(pipelineRun)
+        // Allow only one postcommit at a time accross all the branches
+        withPostcommitLock((isPR() && !commonLodestarModule.doRunPostcommitTests()) ? null : 'postcommit-forgeops') {
+            pipeline.postBuildTests(pipelineRun)
+        }
     }
 
-    if (commonModule.branchSupportsIDCloudReleases()) {
-        if (isPR()) {
-            prAutomation.mergeIfAutomatedProductVersionUpdate(pipelineRun, commonModule.FORGEOPS_GIT_COMMIT)
-        } else {
-            tagReadyForDevPipelines.runStage(pipelineRun)
-            pipeline.createPlatformImagesPR(pipelineRun)
+    if (commonModule.branchSupportsIDCloudReleases() && !isPR()) {
+        pipeline.createPlatformImagesPR(pipelineRun)
+    }
+
+    pipeline.finalNotification()
+}
+
+def withPostcommitLock(String resourceName, Closure process) {
+    if (resourceName) {
+        lock(resource: resourceName) {
+            process()
         }
+    } else {
+        process()
     }
 }
