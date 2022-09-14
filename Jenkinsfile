@@ -7,6 +7,7 @@
  */
 
 @Library([
+    'jenkinslibrary',
     'forgerock-pipeline-libs@3475f82df20563edc6a67a90021bbb5f24d0f494',
     'java-pipeline-libs@7d909d2ffb9ab751dc96e9c7bc9d253d3d993dbb'
 ]) _
