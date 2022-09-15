@@ -6,10 +6,10 @@
  * to such license between the licensee and ForgeRock AS.
  */
 
-@Library([
+@Library(
     'forgerock-pipeline-libs@72949afdc39d024215a48a79bf59411bfbefd86d',
     'java-pipeline-libs@72949afdc39d024215a48a79bf59411bfbefd86d'
-]) _
+) _
 
 import com.forgerock.pipeline.reporting.PipelineRun
 import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
