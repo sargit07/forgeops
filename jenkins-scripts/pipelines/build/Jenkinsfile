@@ -11,6 +11,7 @@
     'java-pipeline-libs@fec85f61a4ddf60aa3dd13fe370f581d3494e002'
 ]) _
 
+import de.schlumpf.*;
 import com.forgerock.pipeline.reporting.PipelineRun
 import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
 
