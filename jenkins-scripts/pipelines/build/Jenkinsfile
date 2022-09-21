@@ -8,7 +8,8 @@
 
 @Library([
     'forgerock-pipeline-libs',
-    'java-pipeline-libs'
+    'java-pipeline-libs',
+    'QaCloudUtils'
 ]) _
 
 import com.forgerock.pipeline.reporting.PipelineRun
