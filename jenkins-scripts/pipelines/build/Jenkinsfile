@@ -9,12 +9,12 @@
 @Library([
     'forgerock-pipeline-libs@b125a6c37f1b6aa20a2727496083b88d8d117bee',
     'java-pipeline-libs@b125a6c37f1b6aa20a2727496083b88d8d117bee'
-]) _
+]) _.
 
 import com.forgerock.pipeline.reporting.PipelineRun
 import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
 
-BASE_VERSION = '7.2.0'
+BASE_VERSION = '7.0.0'
 
 buildDirectories = [
     [ name: 'ds-new', folder: 'ds', arguments: 'ds-new', forceBuild: false ],
