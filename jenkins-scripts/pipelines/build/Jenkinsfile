@@ -6,11 +6,11 @@
  * to such license between the licensee and ForgeRock AS.
  */
 
-@Library(
+@Library([
     'forgerock-pipeline-libs',
     'java-pipeline-libs',
     'QaCloudUtils'
-) _
+]) _
 
 import com.forgerock.pipeline.reporting.PipelineRun
 import com.forgerock.pipeline.reporting.PipelineRunLegacyAdapter
