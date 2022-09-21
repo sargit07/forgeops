@@ -30,8 +30,8 @@ node('gce-vm-forgeops-n1-standard-4') {
         checkout scm
 
         def jobLocation = "${env.workspace}/jenkins-scripts/pipelines/build"
-        def libsLocation = "${env.WORKSPACE}/jenkins-scripts/libs"
-        def stagesLocation = "${env.WORKSPACE}/jenkins-scripts/stages"
+        def libsLocation = "${env.workspace}/jenkins-scripts/libs"
+        def stagesLocation = "${env.workspace}/jenkins-scripts/stages"
 
         localGitUtils = load("${libsLocation}/git-utils.groovy")
         commonModule = load("${libsLocation}/common.groovy")
