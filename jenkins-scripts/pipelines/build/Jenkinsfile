@@ -7,7 +7,7 @@
  */
 
 @Library([
-    'forgerock-pipeline-libs',
+    
     'java-pipeline-libs',
     'QaCloudUtils'
 ]) _
